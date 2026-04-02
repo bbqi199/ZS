@@ -211,56 +211,75 @@
   .checkout-pay-btn { padding:12px 28px; background:var(--primary); color:#fff; border:none; border-radius:24px; font-size:16px; font-weight:700; cursor:pointer; }
 
   /* ===== 订单页 ===== */
-  .order-tabs { background:var(--white); display:flex; border-bottom:1px solid var(--border); }
-  .order-tab { flex:1; text-align:center; padding:12px 4px; font-size:13px; color:var(--text-2); cursor:pointer; position:relative; }
-  .order-tab.active { color:var(--primary); font-weight:600; }
-  .order-tab.active::after { content:''; position:absolute; bottom:0; left:50%; transform:translateX(-50%); width:24px; height:2px; background:var(--primary); border-radius:1px; }
-  .order-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:60px 40px; }
-  .order-empty-icon { font-size:60px; }
-  .order-empty-text { font-size:15px; color:var(--text-3); }
-  .order-card { background:var(--white); border-radius:var(--radius); margin:8px; padding:0; overflow:hidden; box-shadow:var(--shadow); }
-  .order-card-header { padding:12px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); }
-  .order-no { font-size:12px; color:var(--text-3); }
-  .order-status { font-size:13px; font-weight:600; }
-  .order-status.pending { color:#FF9500; }
-  .order-status.processing { color:var(--primary); }
-  .order-status.done { color:var(--green); }
-  .order-status.cancelled { color:var(--text-3); }
-  .order-goods-list { padding:12px 16px; display:flex; flex-direction:column; gap:10px; }
-  .order-goods-row { display:flex; gap:10px; align-items:center; }
-  .order-goods-img { width:52px; height:52px; border-radius:8px; background:#f9f9f9; display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0; position:relative; overflow:hidden; }
-  .order-goods-detail { flex:1; }
-  .order-goods-name { font-size:13px; color:var(--text); font-weight:500; }
-  .order-goods-spec { font-size:11px; color:var(--text-3); margin-top:2px; }
-  .order-goods-price-row { font-size:12px; color:var(--text-2); margin-top:3px; }
-  .order-card-footer { padding:10px 16px; display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--border); }
-  .order-total-text { font-size:13px; color:var(--text-2); }
-  .order-total-text strong { color:var(--primary); font-size:15px; }
-  .order-action-btns { display:flex; gap:8px; }
-  .order-btn { padding:7px 14px; border-radius:16px; font-size:12px; cursor:pointer; border:1.5px solid var(--border); background:var(--white); color:var(--text-2); }
-  .order-btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
-  .order-card-body { padding:0 16px 12px; }
-  .order-addr { font-size:12px; color:var(--text-3); display:flex; align-items:flex-start; gap:4px; margin-top:8px; }
+const GSHEET_URL = 'https://script.google.com/macros/s/AKfycbyjmOZcqSZZSm3rUdlsUraejAs5JwnwcEujSeRtWdEQt07-LXgTTh6_Nsk4jpRMzmgdOw/exec';
 
-  /* ===== 人中心 ===== */
-  .profile-header { background:linear-gradient(135deg,#FF5A1F,#FF8C42); padding:30px 20px 40px; color:#fff; }
-  .profile-avatar-row { display:flex; align-items:center; gap:14px; }
-  .profile-avatar { width:60px; height:60px; border-radius:50%; background:rgba(255,255,255,0.3); display:flex; align-items:center; justify-content:center; font-size:28px; border:2px solid rgba(255,255,255,0.5); }
-  .profile-info .name { font-size:18px; font-weight:700; }
-  .profile-info .phone { font-size:13px; opacity:0.85; margin-top:3px; }
-  .profile-stats { background:var(--white); border-radius:var(--radius); margin:-20px 16px 0; padding:14px 0; display:flex; box-shadow:var(--shadow); }
-  .profile-stat { flex:1; text-align:center; }
-  .profile-stat-num { font-size:18px; font-weight:700; color:var(--text); }
-  .profile-stat-label { font-size:12px; color:var(--text-3); margin-top:3px; }
-  .profile-section { background:var(--white); border-radius:var(--radius); margin:12px 12px 0; overflow:hidden; }
-  .profile-menu-item { display:flex; align-items:center; padding:14px 16px; border-bottom:1px solid var(--border); cursor:pointer; }
-  .profile-menu-item:last-child { border-bottom:none; }
-  .menu-icon { font-size:20px; margin-right:12px; }
-  .menu-label { flex:1; font-size:14px; color:var(--text); }
-  .menu-arrow { font-size:14px; color:var(--text-3); }
-  .menu-badge { background:var(--badge); color:#fff; font-size:10px; padding:1px 6px; border-radius:8px; margin-right:8px; }
+const App = {
+  currentOrderTab: 0, // 0: Tutti, 1: In attesa, 2: In preparazione, 3: Completati
+  ordersData: [],
+  
+  loadOrders: function() {
+    fetch(GSHEET_URL)
+      .then(res => res.json())
+      .then(data => {
+        App.ordersData = data;
+        App.renderOrders();
+      })
+      .catch(err => console.error('订单加载失败:', err));
+  },
 
-  /* ===== 地址页 ===== */
+  renderOrders: function() {
+    const body = document.getElementById('order-body');
+    if (!body) return;
+    body.innerHTML = '';
+
+    // 按订单号分组
+    const grouped = {};
+    App.ordersData.forEach(row => {
+      if (!row['订单号']) return;
+      if (!grouped[row['订单号']]) grouped[row['订单号']] = [];
+      grouped[row['订单号']].push(row);
+    });
+
+    Object.keys(grouped).forEach(orderNo => {
+      const items = grouped[orderNo];
+      const first = items[0];
+      let status = (first['status'] || 'in attesa').toLowerCase();
+      let note = first['note'] || '';
+
+      // Tab 筛选
+      if (App.currentOrderTab === 1 && status !== 'in attesa') return;
+      if (App.currentOrderTab === 2 && status !== 'in preparazione') return;
+      if (App.currentOrderTab === 3 && status !== 'completati') return;
+
+      // 状态颜色
+      let color = '#aaa';
+      if (status === 'in preparazione') color = '#f90';
+      if (status === 'completati') color = '#0a0';
+
+      const html = `
+        <div class="order-card" style="border-left:4px solid ${color};padding:8px;margin:4px 0;">
+          <div><b>Ordine:</b> ${orderNo}</div>
+          <div><b>Stato:</b> ${status}</div>
+          <div><b>Note:</b> ${note}</div>
+          <div><b>Prodotti:</b>
+            <ul>
+              ${items.map(i=>`<li>${i['商品名称']} x ${i['数量(¥)'] || i['数量']}</li>`).join('')}
+            </ul>
+          </div>
+        </div>`;
+      body.innerHTML += html;
+    });
+  },
+
+  switchOrderTab: function(tabIndex) {
+    App.currentOrderTab = tabIndex;
+    document.querySelectorAll('.order-tab').forEach((el,i)=>el.classList.toggle('active', i===tabIndex));
+    App.renderOrders();
+  }
+};
+
+// 页面加载完成后拉取订单
+window.addEventListener('DOMContentLoaded', App.loadOrders);  /* ===== 地址页 ===== */
   .addr-card { background:var(--white); border-radius:var(--radius); margin:8px; padding:14px 16px; box-shadow:var(--shadow); }
   .addr-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; }
   .addr-name-phone { display:flex; align-items:center; gap:8px; }
@@ -2471,3 +2490,4 @@ if(!IS_LOCAL_HOST){
 <!-- 更新时间: 2026-04-03 00:40:11 -->
 <!-- 更新时间: 2026-04-03 00:50:36 -->
 <!-- 更新时间: 2026-04-03 00:57:18 -->
+<!-- 更新时间: 2026-04-03 01:05:02 -->
