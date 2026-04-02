@@ -975,7 +975,7 @@ const App = (function(){
       + '<div style="display:flex;flex-direction:column;gap:0;">';
 
     showResults.forEach(function(g){
-      const imgUrl = g.imageUrl || '';  // 不再回退到本地图片
+      const imgUrl = getImgUrl(g);
       const emoji = g.emoji || '📦';
       html += '<div onclick="App.openDetail(\'' + g.id + '\')"'
         + ' style="display:flex;align-items:center;gap:10px;background:var(--white);padding:9px 14px;border-bottom:1px solid var(--border);cursor:pointer;">'
@@ -1049,7 +1049,7 @@ const App = (function(){
       + (hasMore2 ? ', mostra i primi <b style="color:var(--primary);">' + SHOW_MAX2 + '</b> risultati, inserisci parole chiave più precise' : '')
       + '</div><div style="display:flex;flex-direction:column;gap:0;">';
     showResults2.forEach(function(g){
-      const imgUrl2 = g.imageUrl || '';  // 不再回退到本地图片
+      const imgUrl2 = getImgUrl(g);
       const emoji2 = g.emoji || '📦';
       html2 += '<div onclick="App.openDetail(\'' + g.id + '\')"'
         + ' style="display:flex;align-items:center;gap:10px;background:var(--white);padding:9px 14px;border-bottom:1px solid var(--border);cursor:pointer;">'
@@ -2359,3 +2359,4 @@ if(!IS_LOCAL_HOST){
 <!-- 更新时间: 2026-04-02 06:28:44 -->
 <!-- 更新时间: 2026-04-02 06:40:09 -->
 <!-- 更新时间: 2026-04-02 07:36:48 -->
+<!-- 更新时间: 2026-04-02 23:21:27 -->
