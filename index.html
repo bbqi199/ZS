@@ -1732,8 +1732,34 @@ function buyNow() {
       sheetByOrder[orderNo] = {
         status: normalizeStatus(row.status || row['状态'] || 'pending'),
         merchantNote: row.merchant_note || row['商家留言'] || '',
-        lastUpdate: row.last_update || row['更新时间'] || ''
+        lastUpdate: row.last_update || row['更新时间'] || '',
+        // 保留整行数据，用于新建本地订单
+        _raw: row
       };
+    });
+
+    // 找出 Sheet 上有但本地没有的订单号
+    var localOrderNos = {};
+    (localOrders || []).forEach(function(o) { localOrderNos[o.no] = true; });
+    // 把 Sheet 上新增的订单也加到 localOrders
+    sheetData.forEach(function(row) {
+      var orderNo = row.order_no || row['订单号'];
+      if (orderNo && !localOrderNos[orderNo]) {
+        localOrderNos[orderNo] = true;
+        localOrders.push({
+          no: orderNo,
+          time: row.order_time || row['下单时间'] || '',
+          buyerName: row.buyer_name || row['买家姓名'] || '',
+          buyerPhone: String(row.buyer_phone || row['买家电话'] || ''),
+          address: row.address || row['地址'] || '',
+          remark: row.remark || row['备注'] || '',
+          total: parseFloat(row.total) || 0,
+          items: [], // Sheet 上的详情可能不完整，先留空
+          status: normalizeStatus(row.status || row['状态'] || 'pending'),
+          merchantNote: row.merchant_note || row['商家留言'] || '',
+          lastUpdate: row.last_update || row['更新时间'] || ''
+        });
+      }
     });
 
     // 检测变化，收集需要通知的订单
