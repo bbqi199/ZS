@@ -241,6 +241,8 @@
   .order-btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
   .order-card-body { padding:0 16px 12px; }
   .order-addr { font-size:12px; color:var(--text-3); display:flex; align-items:flex-start; gap:4px; margin-top:8px; }
+  .order-merchant-note { font-size:12px; color:var(--text-2); background:#f0fff4; padding:8px 12px; border-radius:8px; margin-top:8px; border-left:3px solid var(--green); }
+  .order-sheet-loading { font-size:12px; color:var(--text-3); text-align:center; padding:4px; }
 
   /* ===== 人中心 ===== */
   .profile-header { background:linear-gradient(135deg,#FF5A1F,#FF8C42); padding:30px 20px 40px; color:#fff; }
@@ -345,6 +347,53 @@
   .login-btn:active { opacity: 0.85; }
   .login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .login-error { color: #e04100; font-size: 13px; text-align: center; margin-top: 10px; min-height: 18px; }
+
+  /* ===== 订单通知弹窗 ===== */
+  .notify-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5); z-index: 9999;
+    display: none; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .notify-overlay.show { display: flex; }
+  .notify-box {
+    background: #fff; border-radius: 16px; padding: 24px;
+    width: 100%; max-width: 360px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    animation: notifySlideIn 0.3s ease;
+  }
+  @keyframes notifySlideIn {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .notify-list {
+    max-height: 60vh; overflow-y: auto; margin-top: 16px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .notify-list::-webkit-scrollbar { width: 4px; }
+  .notify-list::-webkit-scrollbar-thumb { background: #ddd; border-radius: 2px; }
+  .notify-item {
+    background: #f9f9f9; border-radius: 12px; padding: 14px;
+    border-left: 4px solid var(--primary);
+  }
+  .notify-item.status-done { border-left-color: var(--green); }
+  .notify-item.status-processing { border-left-color: #3478f6; }
+  .notify-item.status-cancelled { border-left-color: #e04100; }
+  .notify-item.order-no { font-size: 11px; color: var(--text-3); margin-bottom: 6px; }
+  .notify-item .notify-status {
+    font-size: 14px; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;
+  }
+  .notify-item .notify-msg {
+    font-size: 13px; color: var(--text-2); background: #f0fff4; padding: 8px 10px;
+    border-radius: 8px; margin-top: 6px;
+  }
+  .notify-item .notify-msg:empty { display: none; }
+  .notify-close-btn {
+    display: block; width: 100%; margin-top: 16px; padding: 12px;
+    background: var(--primary); color: #fff; border: none; border-radius: 10px;
+    font-size: 15px; font-weight: 600; cursor: pointer; text-align: center;
+  }
+  .notify-close-btn:active { opacity: 0.85; }
 </style>
 </head>
 <body>
@@ -790,6 +839,15 @@
   </div>
 </div>
 
+<!-- 订单通知弹窗 -->
+<div class="notify-overlay" id="notify-overlay" onclick="if(event.target===this)closeNotify()">
+  <div class="notify-box">
+    <div style="font-size:18px;font-weight:700;text-align:center;">📬 消息通知</div>
+    <div class="notify-list" id="notify-list"></div>
+    <button class="notify-close-btn" onclick="closeNotify()">知道了</button>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -809,6 +867,7 @@ const CATEGORIES = [
 let GOODS_DATA = [];
 
 // 从外部JSON文件加载商品数据
+// 注意：file:// 协议下 fetch 会被浏览器 CORS 拦截，需通过本地服务器 http://localhost 访问
 fetch('goods.json')
     .then(res => res.json())
     .then(data => {
@@ -1136,6 +1195,12 @@ const App = (function(){
       if(si){ si.value=''; si.blur(); }
       const sc = $('search-clear');
       if(sc) sc.style.display='none';
+    }
+    // 订单页面自动刷新
+    if(pageId === 'page-order'){
+      startOrderAutoRefresh();
+    } else {
+      stopOrderAutoRefresh();
     }
   }
   function goBack(){
@@ -1606,53 +1671,189 @@ function buyNow() {
   }
 
   // ---------- 订单 ----------
-  function renderOrders(){
-    const body=$('order-body');
-    const tabs=['all','pending','processing','done'];
-    const statusMap={pending:'In attesa',processing:'In preparazione',done:'Completati',cancelled:'Annullato'};
-    const statusClass={pending:'pending',processing:'processing',done:'done',cancelled:'cancelled'};
-    let list=state.orders;
-    if(state.orderTabIdx===1) list=state.orders.filter(o=>o.status==='pending');
-    else if(state.orderTabIdx===2) list=state.orders.filter(o=>o.status==='processing');
-    else if(state.orderTabIdx===3) list=state.orders.filter(o=>o.status==='done');
-    if(list.length===0){
-      body.innerHTML=`<div class="order-empty"><div class="order-empty-icon">📋</div><div class="order-empty-text">Nessun ordine trovato</div></div>`;
-      return;
+  // Sheet 数据缓存
+  var _sheetOrdersCache = null;
+  var _sheetOrdersTime = 0;
+  var SHEET_ORDERS_TTL = 15000; // 缓存15秒
+
+  // 从 Google Sheets 读取订单状态
+  function loadOrdersFromSheet(onComplete) {
+    if (_sheetOrdersCache && (Date.now() - _sheetOrdersTime) < SHEET_ORDERS_TTL) {
+      if (onComplete) onComplete(_sheetOrdersCache);
+      return Promise.resolve(_sheetOrdersCache);
     }
-    body.innerHTML=list.map(o=>`
-      <div class="order-card">
-        <div class="order-card-header">
-          <span class="order-no">N. Ordine: ${o.no}</span>
-          <span class="order-status ${statusClass[o.status]}">${statusMap[o.status]}</span>
-        </div>
-        <div class="order-goods-list">${o.items.map(item=>{
-          const og = GOODS_DATA.find(x=>String(x.id)===String(item.goodId)) || {id:item.goodId, emoji:item.emoji||'📦', imageUrl:''};
-          const specQty = getSpecQty(item.spec);
-          const actualQty = item.qty * specQty;
-          const itemTotal = item.price * actualQty;
-          return `<div class="order-goods-row">
-            ${goodsImgHtml(og,'order-goods-img')}
-            <div class="order-goods-detail">
-              <div class="order-goods-name">${item.name}</div>
-              <div class="order-goods-spec">${item.spec}</div>
-              <div class="order-goods-price-row">${formatPrice(itemTotal)} × ${item.qty} cartoni (${actualQty})</div>
-            </div>
-          </div>`;}).join('')}</div>
-        <div class="order-card-body">
-          ${o.address?`<div class="order-addr">📍 ${o.address.name} ${o.address.phone} · ${o.address.region} ${o.address.detail}</div>`:''}
-          ${o.remark?`<div style="font-size:12px;color:var(--text-3);margin-top:6px;">Note: ${o.remark}</div>`:''}
-          <div style="font-size:12px;color:var(--text-3);margin-top:6px;">Data ordine: ${o.time}</div>
-        </div>
-        <div class="order-card-footer">
-          <span class="order-total-text">Pagato: <strong>${formatPrice(o.total)}</strong></span>
-          <div class="order-action-btns">
-            
-            ${o.status==='done'?`<button class="order-btn primary" onclick="App.reorder('${o.no}')">Ordina di Nuovo</button>`:''}
-            ${o.status==='processing'?`<button class="order-btn primary" onclick="App.showToast('Funzione tracciamento in sviluppo…')">Traccia Spedizione</button>`:''}
-            <button class="order-btn" style="color:var(--primary);border-color:var(--primary);" onclick="App.exportOrderExcel('${o.no}')">📥 Esporta Excel</button>
-          </div>
-        </div>
-      </div>`).join('');
+    var url = GSHEET_URL + '?action=readOrders&t=' + Date.now();
+    console.log('[GSheet] 读取订单列表...');
+    return fetch(url)
+      .then(function(res) { if (!res.ok) throw new Error('Network error'); return res.json(); })
+      .then(function(data) {
+        _sheetOrdersCache = data;
+        _sheetOrdersTime = Date.now();
+        if (onComplete) onComplete(data);
+        return data;
+      })
+      .catch(function(err) {
+        console.warn('[GSheet] 读取失败:', err);
+        if (_sheetOrdersCache) { if (onComplete) onComplete(_sheetOrdersCache); return _sheetOrdersCache; }
+        if (onComplete) onComplete([]);
+        return [];
+      });
+  }
+
+  // 已展示过的通知ID集合（避免重复弹窗）
+  var _notifiedIds = {};
+
+  // 合并 Sheet 数据到本地订单（含状态变化检测 + 通知）
+  function mergeSheetToOrders(localOrders, sheetData) {
+    if (!sheetData || !Array.isArray(sheetData)) return localOrders;
+    var sheetByOrder = {};
+    sheetData.forEach(function(row) {
+      var orderNo = row.order_no || row['订单号'];
+      if (!orderNo) return;
+      sheetByOrder[orderNo] = {
+        status: (row.status || row['状态'] || 'pending').toLowerCase(),
+        merchantNote: row.merchant_note || row['商家留言'] || '',
+        lastUpdate: row.last_update || row['更新时间'] || ''
+      };
+    });
+
+    // 检测变化，收集需要通知的订单
+    var notifications = [];
+    var statusEmoji = { pending: '⏳', processing: '📦', done: '✅', cancelled: '❌' };
+    var statusText = { pending: 'In attesa', processing: 'In preparazione', done: 'Completati', cancelled: 'Annullato' };
+
+    return localOrders.map(function(order) {
+      var si = sheetByOrder[order.no];
+      if (si) {
+        var oldStatus = (order.status || 'pending').toLowerCase();
+        var newStatus = si.status.toLowerCase();
+        var noteChanged = si.merchantNote && si.merchantNote !== (order.merchantNote || '');
+        var statusChanged = newStatus !== oldStatus && newStatus !== oldStatus;
+        var notifyKey = order.no + '_' + newStatus + '_' + si.merchantNote;
+
+        if ((statusChanged || noteChanged) && !_notifiedIds[notifyKey]) {
+          _notifiedIds[notifyKey] = true;
+          notifications.push({
+            orderNo: order.no,
+            status: newStatus,
+            statusText: statusText[newStatus] || newStatus,
+            statusEmoji: statusEmoji[newStatus] || '📋',
+            merchantNote: si.merchantNote,
+            lastUpdate: si.lastUpdate
+          });
+        }
+        order.status = si.status;
+        order.merchantNote = si.merchantNote;
+        order.lastUpdate = si.lastUpdate;
+      }
+      return order;
+    }).filter(function() {
+      // 显示通知（在 map 之后触发）
+      if (notifications.length > 0) {
+        showOrderNotifications(notifications);
+        notifications.length = 0; // 清空防止重复
+      }
+      return true;
+    });
+  }
+
+  // 弹出订单通知
+  function showOrderNotifications(items) {
+    var list = document.getElementById('notify-list');
+    if (!list) return;
+    var statusClass = { pending: '', processing: 'status-processing', done: 'status-done', cancelled: 'status-cancelled' };
+    list.innerHTML = items.map(function(item) {
+      return '<div class="notify-item ' + (statusClass[item.status] || '') + '">'
+        + '<div class="order-no">N. Ordine: ' + item.orderNo + '</div>'
+        + '<div class="notify-status">' + (item.statusEmoji || '📋') + ' ' + item.statusText + '</div>'
+        + (item.merchantNote ? '<div class="notify-msg">💬 ' + item.merchantNote + '</div>' : '')
+        + '</div>';
+    }).join('');
+    document.getElementById('notify-overlay').classList.add('show');
+  }
+
+  function closeNotify() {
+    var el = document.getElementById('notify-overlay');
+    if (el) el.classList.remove('show');
+  }
+
+  // 刷新订单（对外接口）
+  function refreshSheetOrders() {
+    _sheetOrdersCache = null;
+    _sheetOrdersTime = 0;
+    return loadOrdersFromSheet();
+  }
+
+  // 自动刷新计时器
+  var _orderRefreshTimer = null;
+  function startOrderAutoRefresh() {
+    if (_orderRefreshTimer) return;
+    refreshSheetOrders().then(function() { renderOrders(); });
+    _orderRefreshTimer = setInterval(function() { refreshSheetOrders().then(function() { renderOrders(); }); }, 30000);
+  }
+  function stopOrderAutoRefresh() {
+    if (_orderRefreshTimer) { clearInterval(_orderRefreshTimer); _orderRefreshTimer = null; }
+  }
+
+  // 渲染订单
+  function renderOrders(){
+    var self = this;
+    loadOrdersFromSheet(function(sheetData) {
+      var mergedOrders = mergeSheetToOrders(state.orders, sheetData);
+      var body = $('order-body');
+      var statusMap = {pending:'In attesa',processing:'In preparazione',done:'Completati',cancelled:'Annullato'};
+      var statusClass = {pending:'pending',processing:'processing',done:'done',cancelled:'cancelled'};
+      var list = mergedOrders;
+      if (state.orderTabIdx === 1) list = mergedOrders.filter(function(o) { var s=(o.status||'').toLowerCase(); return s==='pending'||s==='in attesa'; });
+      else if (state.orderTabIdx === 2) list = mergedOrders.filter(function(o) { var s=(o.status||'').toLowerCase(); return s==='processing'||s==='in preparazione'; });
+      else if (state.orderTabIdx === 3) list = mergedOrders.filter(function(o) { var s=(o.status||'').toLowerCase(); return s==='done'||s==='completati'; });
+      if (list.length === 0) {
+        body.innerHTML = '<div class="order-empty"><div class="order-empty-icon">📋</div><div class="order-empty-text">Nessun ordine trovato</div></div>';
+        return;
+      }
+      body.innerHTML = list.map(function(o) {
+        var actualStatus = (o.status || 'pending').toLowerCase();
+        if (actualStatus === 'in attesa') actualStatus = 'pending';
+        if (actualStatus === 'in preparazione') actualStatus = 'processing';
+        if (actualStatus === 'completati') actualStatus = 'done';
+        if (actualStatus === 'annullato') actualStatus = 'cancelled';
+        var statusText = statusMap[actualStatus] || actualStatus;
+        var statusCls = statusClass[actualStatus] || 'pending';
+        var merchantNoteHtml = o.merchantNote ? '<div class="order-merchant-note"><span style="color:var(--green);">💬 商家回复：</span>' + o.merchantNote + '</div>' : '';
+        var lastUpdateHtml = o.lastUpdate ? '<div style="font-size:11px;color:var(--text-3);">更新时间：' + o.lastUpdate + '</div>' : '';
+        return '<div class="order-card">' +
+          '<div class="order-card-header">' +
+            '<span class="order-no">N. Ordine: ' + o.no + '</span>' +
+            '<span class="order-status ' + statusCls + '">' + statusText + '</span>' +
+          '</div>' +
+          '<div class="order-goods-list">' + o.items.map(function(item) {
+            var og = GOODS_DATA.find(function(x) { return String(x.id) === String(item.goodId); }) || {id:item.goodId, emoji:item.emoji||'📦', imageUrl:''};
+            var specQty = getSpecQty(item.spec);
+            var actualQty = item.qty * specQty;
+            var itemTotal = item.price * actualQty;
+            return '<div class="order-goods-row">' + goodsImgHtml(og,'order-goods-img') +
+              '<div class="order-goods-detail"><div class="order-goods-name">' + item.name + '</div>' +
+              '<div class="order-goods-spec">' + item.spec + '</div>' +
+              '<div class="order-goods-price-row">' + formatPrice(itemTotal) + ' × ' + item.qty + ' cartoni (' + actualQty + ')</div></div></div>';
+          }).join('') + '</div>' +
+          '<div class="order-card-body">' +
+            (o.address ? '<div class="order-addr">📍 ' + o.address.name + ' ' + o.address.phone + ' · ' + o.address.region + ' ' + o.address.detail + '</div>' : '') +
+            (o.remark ? '<div style="font-size:12px;color:var(--text-3);margin-top:6px;">Note: ' + o.remark + '</div>' : '') +
+            merchantNoteHtml + lastUpdateHtml +
+            '<div style="font-size:12px;color:var(--text-3);margin-top:6px;">Data ordine: ' + o.time + '</div>' +
+          '</div>' +
+          '<div class="order-card-footer">' +
+            '<span class="order-total-text">Pagato: <strong>' + formatPrice(o.total) + '</strong></span>' +
+            '<div class="order-action-btns">' +
+              (actualStatus === 'done' ? '<button class="order-btn primary" onclick="App.reorder(\'' + o.no + '\')">Ordina di Nuovo</button>' : '') +
+              (actualStatus === 'processing' ? '<button class="order-btn primary" onclick="App.showToast(\'Funzione tracciamento in sviluppo…\')">Traccia Spedizione</button>' : '') +
+              '<button class="order-btn" style="color:var(--primary);border-color:var(--primary);" onclick="App.exportOrderExcel(\'' + o.no + '\')">📥 Esporta Excel</button>' +
+              '<button class="order-btn" style="color:var(--primary);" onclick="refreshSheetOrders(); renderOrders(); showToast(\'🔄 刷新中…\')">🔄 刷新</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    });
   }
   function switchOrderTab(idx){
     state.orderTabIdx=idx;
@@ -1858,6 +2059,15 @@ function buyNow() {
     renderCatList('cat-list', state.currentCat, 'App.switchCat');
     renderGoodsPanel('goods-panel', state.currentCat);
     updateCartBadge();
+    // 页面加载时检查一次订单状态变化（如果有新消息会弹窗通知）
+    if(GSHEET_URL && state.orders.length > 0) {
+      setTimeout(function() {
+        refreshSheetOrders().then(function(sheetData) {
+          mergeSheetToOrders(state.orders, sheetData.orders || []);
+          save();
+        });
+      }, 1500);
+    }
   }
 
   // ---------- Gestione Prodotti：统计 ----------
@@ -1906,6 +2116,11 @@ function buyNow() {
   let _availableImgIds = null; // Set<string> 或 null(未加载)
   function loadAvailableImages(){
     if(_availableImgIds !== null) return;
+    // file:// 协议下跳过（没有本地服务器，/api/images 不可用）
+    if(window.location.protocol === 'file:'){
+      _availableImgIds = new Set();
+      return;
+    }
     fetch('/api/images').then(r=>r.json()).then(data=>{
       _availableImgIds = new Set(data.files.map(f=>String(f.id)));
     }).catch(()=>{ _availableImgIds = new Set(); });
@@ -2243,7 +2458,7 @@ if(!IS_LOCAL_HOST){
   }
 
   // ===== Google Sheets 订单同步配置 =====
-  var GSHEET_URL = 'https://script.google.com/macros/s/AKfycbyjmOZcqSZZSm3rUdlsUraejAs5JwnwcEujSeRtWdEQt07-LXgTTh6_Nsk4jpRMzmgdOw/exec';
+  var GSHEET_URL = 'https://script.google.com/macros/s/AKfycbwVvzqpx7s8D0DqTXyO1xf2GGoD5SYFqXX9d-CiVq04ZQDFp8ZPp5NieTgeci2iP064/exec';
 
   // 从Specifiche描述中提取最后出现的数字作为Quantità
   function getSpecQty(spec){
@@ -2361,3 +2576,4 @@ if(!IS_LOCAL_HOST){
 <!-- 更新时间: 2026-04-02 07:36:48 -->
 <!-- 更新时间: 2026-04-02 23:21:27 -->
 <!-- 更新时间: 2026-04-03 01:28:01 -->
+<!-- 更新时间: 2026-04-03 19:24:01 -->
