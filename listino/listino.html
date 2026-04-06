@@ -1586,7 +1586,7 @@ function buyNow() {
       const actualQty = i.qty * specQty;
       return s+(g?g.price*actualQty:0);
     },0);
-    const freight = subtotal>=200?0:10;
+    const freight = 0;
     const total=subtotal+freight;
     body.innerHTML=`
       <div class="checkout-section" style="margin:8px;border-radius:12px;overflow:hidden;">
