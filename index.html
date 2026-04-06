@@ -873,11 +873,19 @@ fetch('goods.json')
     .then(data => {
         GOODS_DATA = data;
         console.log('商品数据加载完成，共 ' + GOODS_DATA.length + ' 件');
-        if (typeof initApp === 'function') initApp();
+        // 数据加载完成后自动初始化
+        initApp();
     })
     .catch(err => {
         console.error('加载商品数据失败:', err);
     });
+
+// 初始化应用
+function initApp() {
+    // 渲染 Home 页的分类列表和商品
+    renderCatList('cat-list', state.currentCat, 'App.switchCat');
+    renderGoodsPanel('goods-panel', state.currentCat);
+}
 
 // =====================================================
 // App 主逻辑
