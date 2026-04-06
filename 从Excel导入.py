@@ -2,15 +2,29 @@
 从Excel模板直接导入商品数据
 不经过CSV，避免数字被转成科学计数法
 """
-import openpyxl, json, re, os, subprocess, sys, io
+import openpyxl, json, re, os, subprocess, sys, io, glob
 from datetime import datetime
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-EXCEL_FILE = '商品数据导入模板.xlsx'
+# 查找本文件夹中的 Excel 文件（排除临时文件）
+xlsx_files = glob.glob('*.xlsx')
+xlsx_files = [f for f in xlsx_files if not f.startswith('~$')]
 
-print(f'📂 正在读取 Excel 文件: {EXCEL_FILE}')
+if not xlsx_files:
+    print('❌ 未找到 Excel 文件！')
+    input('按回车键退出...')
+    sys.exit(1)
+
+# 优先选择包含"导入"关键字的文件
+import_files = [f for f in xlsx_files if '导入' in f]
+if import_files:
+    EXCEL_FILE = import_files[0]
+else:
+    EXCEL_FILE = xlsx_files[0]
+
+print(f'📂 已选择: {EXCEL_FILE}')
 
 try:
     # 不用read_only模式，这样可以访问单元格对象和格式信息
@@ -22,7 +36,7 @@ except Exception as e:
     input('按回车键退出...')
     sys.exit(1)
 
-# 读取所有行（不用values_only，以便获取单元格对象）
+# 读取所有行（不用values_only，以便获取A列单元格对象保留前导零）
 goods = []
 row_num = 0
 for row in ws.iter_rows(min_row=2):  # 跳过标题行
@@ -35,12 +49,6 @@ for row in ws.iter_rows(min_row=2):  # 跳过标题行
     id_cell = row[0]
     id_val = str(id_cell.value).strip() if id_cell.value is not None else ''
     
-    # 【关键修复】保留前导零：如果Excel把编号存为数字，前导零会丢失
-    # 检查单元格格式：如果是文本格式(@)，openpyxl已经保留了原始值
-    # 如果是数字格式但值看起来被截断了，尝试从number_format恢复
-    if id_cell.data_type == 'n' and id_cell.number_format == '0':
-        # 整数格式，值已丢失前导零，只能原样保留
-        pass
     # 去掉可能的浮点尾部（如 90.0 → 90）
     if '.' in id_val:
         id_val = id_val.rstrip('0').rstrip('.')
@@ -92,11 +100,11 @@ for row in ws.iter_rows(min_row=2):  # 跳过标题行
     g = {
         'id':       id_val,
         'catId':    cat_id,
-        'emoji':    str(row[8]).strip() if row[8] else '📦',
-        'name':     str(row[2]).strip() if row[2] else '',
-        'spec':     str(row[3]).strip() if row[3] else '',
+        'emoji':    str(row[8].value).strip() if row[8].value else '📦',
+        'name':     str(row[2].value).strip() if row[2].value else '',
+        'spec':     str(row[3].value).strip() if row[3].value else '',
         'price':    price,
-        'unit':     str(row[5]).strip() if row[5] else '',
+        'unit':     str(row[5].value).strip() if row[5].value else '',
         'stock':    stock,
         'tag':      tags,
         'attrs':    attrs,

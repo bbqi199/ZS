@@ -450,11 +450,11 @@
       <div class="quick-entry">
         <div class="entry-item" onclick="App.switchCat(0)">
           <div class="entry-icon" style="background:#fff3ef">🏠</div>
-          <div class="entry-label">ECO SHOP</div>
+          <div class="entry-label">Prodotti per la Casa</div>
         </div>
         <div class="entry-item" onclick="App.switchCat(1)">
           <div class="entry-icon" style="background:#f0f9eb">🧴</div>
-          <div class="entry-label">水货进价</div>
+          <div class="entry-label">Prodotti per l'Igiene</div>
         </div>
         <div class="entry-item" onclick="App.switchCat(2)">
           <div class="entry-icon" style="background:#f0f6ff">🍜</div>
@@ -856,8 +856,8 @@
 // 数据：Categorie Prodotti & 商品列表
 // =====================================================
 const CATEGORIES = [
-  { id:0, name:"ECO SHOP", icon:'🏠' },
-  { id:1, name:"水货进价", icon:'🧴' },
+  { id:0, name:"Prodotti per la Casa", icon:'🏠' },
+  { id:1, name:"Prodotti per l'Igiene", icon:'🧴' },
   { id:2, name:"Alimentari e Snack", icon:'🍜' },
   { id:3, name:"Giochi e Cancelleria", icon:'🧸' },
   { id:4, name:"Abbigliamento e Accessori", icon:'👗' },
@@ -1985,7 +1985,7 @@ function buyNow() {
     $('edit-name').value = state.profile.name||'';
     $('edit-phone').value = state.profile.phone||'';
     $('modal-profile').classList.add('show');
-  }
+  }li
   function saveProfile(){
     state.profile.name=$('edit-name').value.trim();
     state.profile.phone=$('edit-phone').value.trim();
