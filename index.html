@@ -2110,20 +2110,7 @@ function buyNow() {
   // ---------- 初始化 ----------
   function init(){
     load();
-    // 加载用户之前导入的商品数据（如有）
-    try {
-      const savedGoods = localStorage.getItem('yg_goods');
-      if(savedGoods){
-        const parsed = JSON.parse(savedGoods);
-        if(Array.isArray(parsed) && parsed.length > 0){
-          GOODS_DATA.length = 0;
-          parsed.forEach(g => {
-            // 不再自动补上本地图片路径，只使用Cloudinary图片
-            GOODS_DATA.push(g);
-          });
-        }
-      }
-    } catch(e){}
+    // 商品数据统一从 goods.json 加载，不再使用 localStorage 缓存覆盖
     // 预加载本地图片列表（用于导入时自动匹配）
     loadAvailableImages();
     // 渲染HomeCategoria+商品
@@ -2663,3 +2650,4 @@ if(!IS_LOCAL_HOST){
 <!-- 更新时间: 2026-04-07 01:11:09 -->
 <!-- 更新时间: 2026-04-07 01:25:49 -->
 <!-- 更新时间: 2026-04-07 01:37:25 -->
+<!-- 更新时间: 2026-04-07 02:14:31 -->
