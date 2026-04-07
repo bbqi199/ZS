@@ -1212,6 +1212,10 @@ const App = (function(){
     } else {
       stopOrderAutoRefresh();
     }
+    // 同步 history，让手机系统后退键能触发 popstate
+    if(pushStack){
+      history.pushState({ page: pageId }, '', '');
+    }
   }
   function goBack(){
     const prev = state.pageStack.pop();
@@ -1221,6 +1225,16 @@ const App = (function(){
       $(prev).classList.add('active');
     }
   }
+  // 监听手机系统后退键（Android / 浏览器后退按钮）
+  window.addEventListener('popstate', function(){
+    if(state.pageStack.length > 0){
+      goBack();
+      // 保持 history 栈与 pageStack 同步，始终留一条记录防止直接退出
+      history.pushState({ page: state.currentPage }, '', '');
+    }
+  });
+  // 初始化时推入一条 history 记录，确保 popstate 能被触发
+  history.pushState({ page: 'page-home' }, '', '');
 
   // ---------- Categoria渲染 ----------
   function renderCatList(elId, activeCatId, onCatClick){
