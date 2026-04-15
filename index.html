@@ -31,11 +31,7 @@
   .page { display:none; flex-direction:column; height:100%; overflow:hidden; }
   .page.active { display:flex; }
   .page-body { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; }
-  .page-body::-webkit-scrollbar { width:4px; }
-  .page-body::-webkit-scrollbar-thumb { background:#ccc; border-radius:2px; }
-  @media (pointer:coarse) {
-    .page-body::-webkit-scrollbar { display:none; }
-  }
+  .page-body::-webkit-scrollbar { display:none; }
 
   /* ===== 顶部导航 ===== */
   .navbar { background:var(--white); padding:12px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); position:sticky; top:0; z-index:100; }
@@ -78,19 +74,11 @@
   /* Categoria + 商品 */
   .cat-goods { display:flex; flex-direction:column; flex:1; background:var(--white); overflow:hidden; }
   .cat-list { display:flex; flex-direction:row; overflow-x:auto; background:#fff; border-bottom:1px solid var(--border); flex-shrink:0; padding:0 4px; }
-  .cat-list::-webkit-scrollbar { width:4px; }
-  .cat-list::-webkit-scrollbar-thumb { background:#ccc; border-radius:2px; }
-  @media (pointer:coarse) {
-    .cat-list::-webkit-scrollbar { display:none; }
-  }
+  .cat-list::-webkit-scrollbar { display:none; }
   .cat-item { padding:10px 14px; text-align:center; font-size:13px; color:var(--text-2); cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; flex-shrink:0; line-height:1.3; }
   .cat-item.active { color:var(--primary); border-bottom-color:var(--primary); font-weight:600; background:none; }
   .goods-panel { flex:1; overflow-y:auto; padding:8px; }
-  .goods-panel::-webkit-scrollbar { width:4px; }
-  .goods-panel::-webkit-scrollbar-thumb { background:#ccc; border-radius:2px; }
-  @media (pointer:coarse) {
-    .goods-panel::-webkit-scrollbar { display:none; }
-  }
+  .goods-panel::-webkit-scrollbar { display:none; }
   .goods-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
   .goods-card { background:var(--white); border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow); cursor:pointer; border:1px solid var(--border); }
   .goods-img { width:100%; aspect-ratio:1; font-size:40px; display:flex; align-items:center; justify-content:center; background:#f9f9f9; position:relative; overflow:hidden; }
@@ -157,11 +145,7 @@
   .cart-empty-text { font-size:15px; color:var(--text-3); }
   .cart-empty-btn { padding:10px 28px; background:var(--primary); color:#fff; border:none; border-radius:20px; font-size:14px; cursor:pointer; margin-top:8px; }
   .cart-list { flex:1; overflow-y:auto; padding:8px; }
-  .cart-list::-webkit-scrollbar { width:4px; }
-  .cart-list::-webkit-scrollbar-thumb { background:#ccc; border-radius:2px; }
-  @media (pointer:coarse) {
-    .cart-list::-webkit-scrollbar { display:none; }
-  }
+  .cart-list::-webkit-scrollbar { display:none; }
   .cart-item { background:var(--white); border-radius:var(--radius); padding:12px; margin-bottom:8px; display:flex; gap:12px; align-items:center; box-shadow:var(--shadow); }
   .cart-check { width:20px; height:20px; border-radius:50%; border:2px solid var(--border); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; transition:all 0.2s; }
   .cart-check.checked { background:var(--primary); border-color:var(--primary); color:#fff; font-size:12px; }
@@ -908,7 +892,7 @@ fetch('goods.json')
 // App 主逻辑
 // =====================================================
 const App = (function(){
-  var GSHEET_URL = 'https://script.google.com/macros/s/AKfycbzb64G3YCamfJ9C4_AcY9ld5L4OKSWVwuM0LJ1PpJv9Bi1seN6AVQ7t-9u3_-qjVNEw/exec';
+  var GSHEET_URL = 'https://script.google.com/macros/s/AKfycbxaKZqHiZP324LVnaNjBw0KCYxh6AlADBIQHztwqIWO_Vkboa_Ny6IaFCJe-l5ky8FX/exec';
   let state = {
     currentTab: 'home',
     currentPage: 'page-home',
@@ -2442,10 +2426,15 @@ function buyNow() {
       items:       itemRows
     };
 
-    var url = GSHEET_URL + '?data=' + encodeURIComponent(JSON.stringify(payload));
+    var url = GSHEET_URL + '?action=addOrder';
     console.log('[GSheet] payload items count:', itemRows.length);
     try {
-      fetch(url, { method: 'GET', mode: 'no-cors' })
+      fetch(url, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
         .then(function(){ console.log('[GSheet] 同步成功, order:', order.no); })
         .catch(function(err){ console.warn('[GSheet] 同步失败:', err); });
     } catch(e) {
@@ -2666,5 +2655,4 @@ if(!IS_LOCAL_HOST){
 <!-- 更新时间: 2026-04-07 01:11:09 -->
 <!-- 更新时间: 2026-04-07 01:25:49 -->
 <!-- 更新时间: 2026-04-07 01:37:25 -->
-<!-- 更新时间: 2026-04-14 23:56:43 -->
-<!-- 更新时间: 2026-04-15 01:22:06 -->
+<!-- 更新时间: 2026-04-16 01:33:59 -->
