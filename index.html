@@ -90,6 +90,10 @@
   .goods-price { font-size:14px; font-weight:700; color:var(--primary); flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .goods-price span { font-size:11px; font-weight:400; color:var(--text-3); }
   .add-btn { width:26px; height:26px; border-radius:50%; background:var(--primary); color:#fff; border:none; font-size:16px; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+  .stepper { display:flex; align-items:center; gap:4px; }
+  .stepper-btn { width:24px; height:24px; border-radius:50%; background:var(--primary); color:#fff; border:none; font-size:13px; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+  .stepper-btn.minus { background:#f0f0f0; color:var(--text-2); }
+  .stepper-num { font-size:13px; font-weight:600; min-width:18px; text-align:center; color:var(--text); }
 
   /* 商品列表模式 */
   .goods-list-item { background:var(--white); border-radius:var(--radius); margin-bottom:8px; padding:12px; display:flex; gap:12px; box-shadow:var(--shadow); cursor:pointer; border:1px solid var(--border); }
@@ -1154,14 +1158,14 @@ const App = (function(){
 
 
 
-  // ---------- 图片辅助：只使用Cloudinary图片，不回退本地 ----------
+  // ---------- 图片辅助：通过Worker加载B2图片 ----------
   const _imgCache = {}; // id → url | null (null=无图)
 
   function getImgUrl(g){
     // 优先使用商品自带的 imageUrl
     if(g.imageUrl && g.imageUrl.trim()) return g.imageUrl.trim();
-    // 回退到 Cloudinary
-    if(g.id) return 'https://res.cloudinary.com/dzcy6twle/image/upload/q_auto,f_auto/products/' + encodeURIComponent(String(g.id));
+    // 通过 Worker 代理加载 B2 图片
+    if(g.id) return 'https://ecoshop.zongweihai199.workers.dev/' + encodeURIComponent(String(g.id)) + '.jpg';
     return '';
   }
 
@@ -1276,14 +1280,14 @@ const App = (function(){
     if(!grid) return;
     const slice = _pageList.slice(_pageOffset, _pageOffset + PAGE_SIZE);
     grid.insertAdjacentHTML('beforeend', slice.map(g=>`
-      <div class="goods-card" onclick="App.openDetail('${g.id}')">
+      <div class="goods-card" data-gid="${g.id}" onclick="App.openDetail('${g.id}')">
         ${goodsImgHtml(g,'goods-img')}
         <div class="goods-info">
           <div class="goods-name">${g.name}</div>
           <div class="goods-id">Codice: ${g.id}</div>
           <div class="goods-bottom">
-            <div class="goods-price">${formatPrice(g.price)}<span>/${g.unit}${g.spec ? ' · '+g.spec : ''}</span></div>
-            <button class="add-btn" onclick="event.stopPropagation();App.quickAddCart('${g.id}')">+</button>
+            <div class="goods-price">${formatPrice(g.price)}${g.spec ? ' <span style="font-size:11px;color:var(--text-3);">'+g.spec+'</span>' : ''}</div>
+            ${_sp(g.id)}
           </div>
         </div>
       </div>`).join(''));
@@ -1381,6 +1385,13 @@ const App = (function(){
 
   // ---------- Carrello ----------
   function cartKey(goodId, spec){ return `${goodId}__${spec}`; }
+  
+  // 步进器函数
+  function _qty(gId){var g=GOODS_DATA.find(function(x){return String(x.id)===String(gId);});if(!g)return 0;var sp=(g.specs&&g.specs[0])||g.spec||'';var it=state.cartItems.find(function(i){return i.key===gId+'__'+sp;});return it?it.qty:0;}
+  function _chg(gId,delta){var g=GOODS_DATA.find(function(x){return String(x.id)===String(gId);});if(!g)return;var sp=(g.specs&&g.specs[0])||g.spec||'';var key=gId+'__'+sp;var ix=state.cartItems.findIndex(function(i){return i.key===key;});if(ix<0){if(delta>0){state.cartItems.push({key:key,goodId:gId,spec:sp,qty:delta,checked:true});save();updateCartBadge();_ref(gId);}return;}var it=state.cartItems[ix];var n=Math.max(0,it.qty+delta);if(n===0)state.cartItems.splice(ix,1);else it.qty=n;save();updateCartBadge();_ref(gId);}
+  window._chg=_chg;window._qty=_qty;window._ref=_ref;
+  function _sp(gId){var q=_qty(gId);return'<div class="stepper"><button class="stepper-btn minus" style="visibility:'+(q>0?'visible':'hidden')+'" onclick="event.stopPropagation();_chg(\''+gId+'\',-1)">-</button><span class="stepper-num">'+q+'</span><button class="stepper-btn plus" onclick="event.stopPropagation();_chg(\''+gId+'\',1)">+</button></div>';}
+  function _ref(gId){document.querySelectorAll('[data-gid]').forEach(function(el){if(el.getAttribute('data-gid')!==String(gId))return;var sp=el.querySelector('.stepper');if(!sp)return;var q=_qty(gId);var mn=sp.querySelector('.minus');var nm=sp.querySelector('.stepper-num');if(nm)nm.textContent=q;if(mn)mn.style.visibility=q>0?'visible':'hidden';});document.querySelectorAll('[data-sid]').forEach(function(el){if(el.getAttribute('data-sid')!==String(gId))return;var sp=el.querySelector('.stepper');if(!sp)return;var q=_qty(gId);var mn=sp.querySelector('.minus');var nm=sp.querySelector('.stepper-num');if(nm)nm.textContent=q;if(mn)mn.style.visibility=q>0?'visible':'hidden';});}
   
   // 获取商品每箱数量：从 GOODS_DATA 中找到同 id 的所有记录，取最大的 spec 值
   // 例如：spec=1 (箱价) 和 spec=6 (件价) 共存时，每箱 = 6 件
